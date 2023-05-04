@@ -21,14 +21,14 @@ if BIG_MODEL:
     model_name = "facebook/incoder-6B"
 
     # the arguments added below will load a half precision version of the model,
-    # which requires less RAM than loading the full float32 version.  this 
+    # which requires less RAM than loading the full float32 version.  this
     # should fit in ~16GB of RAM
     # NOTE: half precision should *not* be used if you plan to fine-tune the
     # model. You'll need full precision and a lot of GPU memory. We have not
     # tested fine-tuning in `transformers` (the model was trained in fairseq)
     if CUDA:
         kwargs = dict(
-            revision="float16", 
+            revision="float16",
             torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
         )
@@ -46,9 +46,10 @@ print("loading tokenizer")
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 print("loading complete")
 
-if CUDA:
-    # if you plan to fine-tune the model, you should not use half precision.
-    model = model.half().cuda()
+# if CUDA:
+#     # if you plan to fine-tune the model, you should not use half precision.
+#     model = model.half()
+        #
 
 # signals the start of a document
 BOS = "<|endoftext|>"
@@ -65,7 +66,7 @@ def generate(input: str, max_to_generate: int=128, temperature: float=0.2):
     """
     input_ids = tokenizer(input, return_tensors="pt").input_ids
     if CUDA:
-        input_ids = input_ids.cuda()
+        input_ids = input_ids
     max_length = max_to_generate + input_ids.flatten().size(0)
     if max_length > 2048:
         print("warning: max_length {} is greater than the context window {}".format(max_length, 2048))
@@ -89,7 +90,7 @@ def infill(parts: List[str], max_to_generate: int=128, temperature: float=0.2, e
             that the model context size is 2048.
     temperature: float. temperature parameter for sampling.
     extra_sentinel: bool. we recommend setting this to True, as it makes it
-            easier for the model to end generated infills. See the footnote in 
+            easier for the model to end generated infills. See the footnote in
             section 2.2 of our paper for details.
     max_retries: int. if > 1, use rejection sampling to keep sampling infills until
             all infills sample a completion token.
@@ -109,7 +110,7 @@ def infill(parts: List[str], max_to_generate: int=128, temperature: float=0.2, e
 
         if VERBOSE:
             print(f"retry {retries_attempted}")
-        
+
         ## (1) build the prompt
         if len(parts) == 1:
             prompt = parts[0]
@@ -120,7 +121,7 @@ def infill(parts: List[str], max_to_generate: int=128, temperature: float=0.2, e
                 prompt += part
                 if extra_sentinel or (sentinel_ix < len(parts) - 1):
                     prompt += make_sentinel(sentinel_ix)
-        
+
         infills = []
         complete = []
 
@@ -159,13 +160,13 @@ def infill(parts: List[str], max_to_generate: int=128, temperature: float=0.2, e
         print("restitched text:")
         print(text)
         print()
-    
+
     return {
         'text': text, # str, the completed document (with infills inserted)
         'parts': parts, # List[str], length N. Same as passed to the method
         'infills': infills, # List[str], length N-1. The list of infills generated
         'retries_attempted': retries_attempted, # number of retries used (if max_retries > 1)
-    } 
+    }
 
 def code_to_docstring(max_to_generate=128, temperature=0.2):
     # this will sometimes generate extra functions! this can be avoided by truncating generation when e.g. a """ is produced
@@ -197,9 +198,22 @@ def <insert>
     print(result["text"])
     return result["text"]
 
+def generate_java_code(max_to_generate=128, temperature=0.2):
+    example = '''
+        /**
+     * Composes 2 given function and returns a new function that applies f2 on the result of f1 when called with a given argument.
+     * @param f1 Function 1
+     * @param f2 Function 2
+     * @return Function that is equivalnet of f2(f1(R))
+     */
+    public static <R, S, T> Function<R, S> compose(Function<R, T> f1, Function<T, S> f2) {
+        <insert>
+    }
+    '''
+    parts = example.split("<insert>")
+    result = infill(parts, max_to_generate=max_to_generate, temperature=temperature)
+    print(result["text"])
+    return result["text"]
+
 if __name__ == "__main__":
-    print("code to docstring test:")
-    code_to_docstring()
-    print()
-    print("docstring to code test:")
-    docstring_to_code()
+    generate_java_code()
